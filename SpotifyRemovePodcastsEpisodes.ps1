@@ -50,7 +50,7 @@ catch { throw "Unable to open archive $($SpotifyXPUIdotSPA)" }
 
 $FindXPUI = $SpotifyXPUISPAFile.Entries | Where-Object { $_.FullName -eq $XPUIFileTargetName }
 
-# Try to file the file inside the zip
+# Try to find the file inside the zip
 if ($null -eq $FindXPUI) { throw "Unable to open archive $($XPUIFileTargetName)" }
 
 # Open the content into a string via a stream reader
@@ -70,7 +70,7 @@ try {
     # If needed, zero out the file -- in case the new file is shorter than the old one
     $XPUIStreamWriter.BaseStream.SetLength(0)
 
-    # Insert the $text to the file and close
+    # Reinsert the content and close
     $XPUIStreamWriter.Write($XPUIFileContent)
     $XPUIStreamWriter.Flush()
     $XPUIStreamWriter.Close()
