@@ -3,12 +3,17 @@
 .SYNOPSIS
   Powershell Spotify Remove Podcasts and Episodes script
 .DESCRIPTION
-  Locates and edits spotify file %appdata%/spotify/apps/xpui.spa to remove several items and change the UI behavior
+  Locates and edits spotify file %appdata%/spotify/apps/xpui.spa to alter the UI behavior
 .INPUTS
   None
 .OUTPUTS
   None unless an error occurs
 .NOTES
+  Version:        1.1
+  Author:         Doug Barry
+  Creation Date:  20220223
+  Purpose/Change: Fix issue #2: https://github.com/DougBarry/powershell-spotify-remove-podcasts/issues/2
+
   Version:        1.0
   Author:         Doug Barry
   Creation Date:  20220111
@@ -28,6 +33,10 @@ $SPAFILETargetName = "xpui.spa"
 # Name of file inside .spa archive to search and replace within
 $XPUIFileTargetName = "xpui.js"
 
+$SearchReplace = @{
+  'withQueryParameters(e){return this.queryParameters=e,this}' = 'withQueryParameters(e){return this.queryParameters=(e.types?{...e, types: e.types.split(",").filter(_ => !["episode","show"].includes(_)).join(",")}:e),this}'
+}
+
 $ErrorActionPreference = "Stop"
 
 # Load ZipFile (Compression.FileSystem) if necessary
@@ -38,14 +47,15 @@ catch { [System.Reflection.Assembly]::LoadWithPartialName('System.IO.Compression
 $SpotifyAppdataRoot = Join-Path -Path "$([Environment]::GetFolderPath('ApplicationData'))" -ChildPath "Spotify"
 $SpotifyAppsPath = Join-Path -Path $SpotifyAppdataRoot -ChildPath "Apps"
 
-$SpotifyXPUIdotSPA = Get-ChildItem -Path $SpotifyAppsPath -Filter "$($SPAFILETargetName)" | Select-Object -First 1
+$SpotifyXPUIdotSPA = (Get-ChildItem -Path $SpotifyAppsPath -Filter "$($SPAFILETargetName)" | Select-Object -First 1).FullName
+$SpotifyXPUIdotSPABackup = "$($SpotifyXPUIdotSPA).bak"
 
 # Backup file
-try { Copy-Item -Path $SpotifyXPUIdotSPA -Destination "$($SpotifyXPUIdotSPA.FullName).bak" -ErrorAction Stop }
+try { Copy-Item -Path $SpotifyXPUIdotSPA -Destination $SpotifyXPUIdotSPABackup -ErrorAction Stop }
 catch { throw "Unable to back up file $($SpotifyXPUIdotSPA)" }
 
 # Open zip file with update mode (Update, Read, Create -- are the options)
-try { $SpotifyXPUISPAFile = [System.IO.Compression.ZipFile]::Open( $SpotifyXPUIdotSPA.FullName, 'Update' ) }
+try { $SpotifyXPUISPAFile = [System.IO.Compression.ZipFile]::Open( $SpotifyXPUIdotSPA, 'Update' ) }
 catch { throw "Unable to open archive $($SpotifyXPUIdotSPA)" }
 
 $FindXPUI = $SpotifyXPUISPAFile.Entries | Where-Object { $_.FullName -eq $XPUIFileTargetName }
@@ -61,8 +71,10 @@ try {
     $XPUIStreamReader.Dispose()
 
     # Manipulate content in string
-    $XPUIFileContent = $XPUIFileContent -replace ',show,',','
-    $XPUIFileContent = $XPUIFileContent -replace ',episode"','"'
+    foreach ($Pair in $SearchReplace.GetEnumerator())
+    {
+      $XPUIFileContent = $XPUIFileContent.Replace($Pair.Name, $Pair.Value)
+    }
 
     # Open stream writer to alter zipped contents
     $XPUIStreamWriter = [System.IO.StreamWriter]$( $SpotifyXPUISPAFile.Entries | Where-Object { $_.FullName -eq $XPUIFileTargetName }).Open()
